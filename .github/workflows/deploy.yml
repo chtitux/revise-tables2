@@ -1,0 +1,56 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - claude/react-github-actions-deploy-VkPkE
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate PWA icons
+        run: npm run generate-icons
+
+      - name: Build application
+        run: npm run build
+
+      - name: Deploy to main branch
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          # Checkout main branch
+          git fetch origin main:main || git checkout -b main
+          git checkout main
+
+          # Remove all files except .git
+          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
+
+          # Copy build files to root
+          cp -r dist/* .
+
+          # Create .nojekyll to bypass Jekyll processing on GitHub Pages
+          touch .nojekyll
+
+          # Add all changes
+          git add -A
+
+          # Commit and push
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Deploy from ${GITHUB_SHA}" && git push origin main)
