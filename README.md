@@ -56,9 +56,12 @@ L'application peut être installée comme une app native sur :
 3. **Validation** : Cliquez sur "Valider ✅" ou appuyez sur Entrée
 4. **Score** : Obtenez 10/10 pour une célébration spéciale !
 
-## 🔧 Configuration GitHub Actions
+## 🔧 Déploiement GitHub Pages
 
-Le déploiement automatique est configuré pour pousser sur la branche `main` à chaque push sur `claude/react-github-actions-deploy-VkPkE`.
+Le déploiement automatique sur GitHub Pages est configuré via GitHub Actions :
+- Build automatique à chaque push sur `main` ou `claude/react-github-actions-deploy-VkPkE`
+- Déploiement sur GitHub Pages uniquement depuis la branche `main`
+- L'application est accessible via l'URL GitHub Pages de votre dépôt
 
 ## 📄 Licence
 
