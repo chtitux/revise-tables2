@@ -29,10 +29,11 @@ function App() {
   const [debugMode, setDebugMode] = useState(false)
   const [debugMessages, setDebugMessages] = useState([])
   const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const [showInstallButton, setShowInstallButton] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const recognitionRef = useRef(null)
   const inputRef = useRef(null)
+  const wakeLockRef = useRef(null)
 
   // Sauvegarde automatique
   useEffect(() => {
@@ -46,10 +47,18 @@ function App() {
     const handler = (e) => {
       e.preventDefault()
       setDeferredPrompt(e)
-      setShowInstallButton(true)
     }
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
   // Reconnaissance vocale
@@ -61,9 +70,11 @@ function App() {
       recognition.continuous = false
       recognition.interimResults = false
 
-      recognition.onstart = () => {
+      recognition.onstart = async () => {
         setIsListening(true)
         addDebugMessage('Reconnaissance vocale démarrée')
+        // Activer wake lock
+        await requestWakeLock()
       }
 
       recognition.onresult = (event) => {
@@ -74,6 +85,10 @@ function App() {
         if (number !== null) {
           setUserAnswer(number.toString())
           addDebugMessage(`Converti en nombre: ${number}`)
+          // Auto-valider après un court délai
+          setTimeout(() => {
+            validateAnswer(number)
+          }, 500)
         } else {
           addDebugMessage(`Impossible de convertir "${transcript}" en nombre`)
         }
@@ -82,16 +97,37 @@ function App() {
       recognition.onerror = (event) => {
         setIsListening(false)
         addDebugMessage(`Erreur: ${event.error}`)
+        releaseWakeLock()
       }
 
       recognition.onend = () => {
         setIsListening(false)
         addDebugMessage('Reconnaissance vocale arrêtée')
+        releaseWakeLock()
       }
 
       recognitionRef.current = recognition
     }
   }, [])
+
+  const requestWakeLock = async () => {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen')
+        addDebugMessage('Wake lock activé')
+      } catch (err) {
+        addDebugMessage(`Wake lock erreur: ${err.message}`)
+      }
+    }
+  }
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release()
+      wakeLockRef.current = null
+      addDebugMessage('Wake lock relâché')
+    }
+  }
 
   const addDebugMessage = (msg) => {
     setDebugMessages(prev => {
@@ -158,10 +194,12 @@ function App() {
     inputRef.current?.focus()
   }
 
-  const checkAnswer = () => {
-    if (!currentQuestion || userAnswer === '') return
+  const validateAnswer = (answerValue) => {
+    if (!currentQuestion) return
 
-    const answer = parseInt(userAnswer)
+    const answer = typeof answerValue === 'number' ? answerValue : parseInt(userAnswer)
+    if (isNaN(answer) || userAnswer === '') return
+
     if (answer === currentQuestion.answer) {
       setShowSuccess(true)
       setShowError(false)
@@ -183,6 +221,10 @@ function App() {
     }
   }
 
+  const checkAnswer = () => {
+    validateAnswer()
+  }
+
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       recognitionRef.current.start()
@@ -190,11 +232,27 @@ function App() {
   }
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return
+    if (!deferredPrompt) {
+      alert('L\'installation n\'est pas disponible ou l\'application est déjà installée.')
+      return
+    }
     deferredPrompt.prompt()
     const { outcome } = await deferredPrompt.userChoice
     setDeferredPrompt(null)
-    setShowInstallButton(false)
+  }
+
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen()
+      } catch (err) {
+        console.error('Erreur fullscreen:', err)
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen()
+      }
+    }
   }
 
   const toggleNumber = (type, num) => {
@@ -259,12 +317,13 @@ function App() {
       <header>
         <h1>✖️ Révise Tables</h1>
         <div className="header-buttons">
-          {showInstallButton && (
-            <button onClick={handleInstallClick} className="install-button">
-              📥 Installer l'application
-            </button>
-          )}
-          <button onClick={() => setShowSettings(!showSettings)} className="settings-button">
+          <button onClick={handleInstallClick} className="install-button" title="Installer l'application">
+            📥
+          </button>
+          <button onClick={toggleFullscreen} className="fullscreen-button" title="Plein écran">
+            {isFullscreen ? '🗗' : '⛶'}
+          </button>
+          <button onClick={() => setShowSettings(!showSettings)} className="settings-button" title="Paramètres">
             ⚙️
           </button>
         </div>
